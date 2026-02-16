@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db, schema } from '@/lib/db';
-import { eq, desc, sql } from 'drizzle-orm';
+import { getForecastsByResort } from '@/lib/db/data-source';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -10,13 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'resortId required' }, { status: 400 });
   }
 
-  // Get latest forecast per date (dedup by fetched_at)
-  const allForecasts = db
-    .select()
-    .from(schema.dailyForecasts)
-    .where(eq(schema.dailyForecasts.resortId, resortId))
-    .orderBy(desc(schema.dailyForecasts.fetchedAt))
-    .all();
+  const allForecasts = getForecastsByResort(resortId);
 
   // Keep only the latest fetched_at per date
   const seen = new Set<string>();

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getResortsByArea } from '@/data/resorts';
-import { db, schema } from '@/lib/db';
-import { eq, desc } from 'drizzle-orm';
+import { getForecastsByDate } from '@/lib/db/data-source';
 import { scoreResorts } from '@/lib/scoring/recommend';
 import { DailyForecast } from '@/lib/types';
 
@@ -13,34 +12,28 @@ export async function GET(request: Request) {
   const area = (searchParams.get('area') || 'tokyo') as 'tokyo' | 'hokkaido';
 
   const areaResorts = getResortsByArea(area);
-
-  // Get all forecasts for the date, ordered by fetched_at DESC
-  const forecastRows = db
-    .select()
-    .from(schema.dailyForecasts)
-    .where(eq(schema.dailyForecasts.date, date))
-    .orderBy(desc(schema.dailyForecasts.fetchedAt))
-    .all();
+  const forecastRows = getForecastsByDate(date);
 
   // Keep only the latest fetched_at per resort_id
   const forecastMap = new Map<string, DailyForecast>();
   for (const row of forecastRows) {
-    if (forecastMap.has(row.resortId)) continue; // already have newer
-    forecastMap.set(row.resortId, {
-      resortId: row.resortId,
+    const rid = row.resort_id;
+    if (forecastMap.has(rid)) continue;
+    forecastMap.set(rid, {
+      resortId: rid,
       date: row.date,
-      newSnowCm: row.newSnowCm ?? 0,
-      snowBaseCm: row.snowBaseCm ?? 0,
-      tempTopC: row.tempTopC ?? 0,
-      tempMidC: row.tempMidC ?? 0,
-      tempBottomC: row.tempBottomC ?? 0,
-      windSpeedTop: row.windSpeedTop ?? 0,
-      windSpeedMid: row.windSpeedMid ?? 0,
-      weatherCondition: row.weatherCondition ?? 'unknown',
-      weatherIcon: row.weatherIcon ?? '',
-      freezingLevelM: row.freezingLevelM ?? 0,
-      precipMm: row.precipMm ?? 0,
-      fetchedAt: row.fetchedAt,
+      newSnowCm: row.new_snow_cm ?? 0,
+      snowBaseCm: row.snow_base_cm ?? 0,
+      tempTopC: row.temp_top_c ?? 0,
+      tempMidC: row.temp_mid_c ?? 0,
+      tempBottomC: row.temp_bottom_c ?? 0,
+      windSpeedTop: row.wind_speed_top ?? 0,
+      windSpeedMid: row.wind_speed_mid ?? 0,
+      weatherCondition: row.weather_condition ?? 'unknown',
+      weatherIcon: row.weather_icon ?? '',
+      freezingLevelM: row.freezing_level_m ?? 0,
+      precipMm: row.precip_mm ?? 0,
+      fetchedAt: row.fetched_at,
     });
   }
 
