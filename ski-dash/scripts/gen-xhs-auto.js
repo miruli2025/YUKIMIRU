@@ -482,10 +482,11 @@ function buildListHTML(title, subtitle, pageLabel, resorts, driveLabel) {
 // Main
 // ============================================================
 async function main() {
-  // Date: arg or today JST
+  // Date: arg or tomorrow JST (cards show next-day forecast)
   let dateStr = process.argv[2];
   if (!dateStr) {
     const now = new Date(Date.now() + 9 * 3600 * 1000);
+    now.setDate(now.getDate() + 1);
     dateStr = now.toISOString().slice(0, 10);
   }
   console.log(`Generating cards for ${dateStr}`);
