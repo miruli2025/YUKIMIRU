@@ -1,0 +1,9 @@
+-e node_modules/
+.next/
+data/*.db
+output/
+*.log
+node_modules/
+.next/
+data/*.db
+public/cards/*.png

@@ -1,0 +1,38 @@
+{
+  "name": "ski-dash",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "fetch": "tsx scripts/fetch-data.ts",
+    "seed": "tsx scripts/seed-mock.ts",
+    "lint": "next lint"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
+    "autoprefixer": "^10.4.24",
+    "better-sqlite3": "^12.6.2",
+    "cheerio": "^1.2.0",
+    "drizzle-orm": "^0.45.1",
+    "next": "^14.2.35",
+    "playwright": "^1.58.2",
+    "postcss": "^8.5.6",
+    "puppeteer-core": "^24.37.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "drizzle-kit": "^0.31.9",
+    "tsx": "^4.21.0"
+  }
+}
