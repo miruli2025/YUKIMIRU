@@ -189,9 +189,49 @@ function formatPowderMessage(alerts: PowderAlert[]): string | null {
   return msg;
 }
 
+// --- Step 3: Export JSON for Vercel ---
+function exportJsonForVercel() {
+  console.error('[export] Exporting forecasts.json for Vercel...');
+  const rows = sqlite.prepare('SELECT * FROM daily_forecasts ORDER BY date, resort_id').all();
+  const jsonPath = path.join(process.cwd(), 'data', 'forecasts.json');
+  fs.writeFileSync(jsonPath, JSON.stringify(rows));
+  console.error(`[export] Exported ${rows.length} rows to forecasts.json`);
+  return rows.length;
+}
+
+// --- Step 4: Git push to trigger Vercel redeploy ---
+function gitPushToVercel(): boolean {
+  const { execSync } = require('child_process');
+  try {
+    const cwd = process.cwd();
+    execSync('git add data/forecasts.json', { cwd, stdio: 'pipe' });
+    
+    // Check if there are changes to commit
+    const status = execSync('git diff --cached --name-only', { cwd, stdio: 'pipe' }).toString().trim();
+    if (!status) {
+      console.error('[git] No changes to commit');
+      return false;
+    }
+    
+    const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const dateStr = now.toISOString().slice(0, 10);
+    execSync(`git commit -m "data: update forecasts ${dateStr}"`, { cwd, stdio: 'pipe' });
+    execSync('git push origin main', { cwd, stdio: 'pipe', timeout: 30000 });
+    console.error('[git] Pushed to GitHub → Vercel will redeploy');
+    return true;
+  } catch (err: any) {
+    console.error('[git] Push failed:', err.message);
+    return false;
+  }
+}
+
 // --- Main ---
 async function main() {
   const { success, failed } = await fetchAll();
+
+  // Export JSON + push to GitHub for Vercel
+  const exportedRows = exportJsonForVercel();
+  const pushed = gitPushToVercel();
 
   const alerts = checkPowder();
   const message = formatPowderMessage(alerts);
@@ -199,6 +239,7 @@ async function main() {
   // Output structured result as JSON on stdout
   const result = {
     fetch: { success, failed, total: resorts.length },
+    export: { rows: exportedRows, pushed },
     powder: {
       alertCount: alerts.length,
       alerts,
