@@ -83,7 +83,7 @@ function scoreFreshSnow(cm) {
 }
 
 function scoreSnowDepth(cm) {
-  return interpolate(cm, [[0,0],[50,30],[100,50],[200,70],[300,85],[400,100]]);
+  return interpolate(cm, [[0,0],[50,25],[100,45],[200,65],[300,80],[400,90],[500,100]]);
 }
 
 function scoreWeather(condition) {
@@ -117,11 +117,7 @@ function scoreTemperature(tempMidC) {
 }
 
 function scoreWind(windMid) {
-  if (windMid < 5) return 95;
-  if (windMid < 10) return 80;
-  if (windMid < 15) return 60;
-  if (windMid < 20) return 40;
-  return 20;
+  return interpolate(windMid, [[0,95],[5,90],[10,75],[15,60],[20,45],[30,30],[40,20],[50,10]]);
 }
 
 function scoreAccessTokyo(driveTimeMin) {
@@ -160,7 +156,7 @@ function scoreTrails(trailCount, diffBeg, diffInt, diffAdv) {
 }
 
 const WEIGHTS_TOKYO = { freshSnow:0.25, snowDepth:0.10, weather:0.10, temperature:0.10, wind:0.10, access:0.15, value:0.10, trails:0.10 };
-const WEIGHTS_HOKKAIDO = { freshSnow:0.30, snowDepth:0.15, weather:0.10, temperature:0.10, wind:0.10, access:0.05, value:0.10, trails:0.10 };
+const WEIGHTS_HOKKAIDO = { freshSnow:0.28, snowDepth:0.18, weather:0.10, temperature:0.10, wind:0.07, access:0.05, value:0.10, trails:0.12 };
 
 function scoreResort(resort, forecast, area) {
   const w = area === 'hokkaido' ? WEIGHTS_HOKKAIDO : WEIGHTS_TOKYO;
