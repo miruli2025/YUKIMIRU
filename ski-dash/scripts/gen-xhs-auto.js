@@ -82,8 +82,27 @@ function scoreFreshSnow(cm) {
   return interpolate(cm, [[0,20],[5,40],[10,55],[20,70],[30,80],[50,100]]);
 }
 
+// Effective fresh snow: today + yesterday * decay (based on today's temp)
+function calcEffectiveSnow(todaySnow, yesterdaySnow, tempMidC) {
+  let decay;
+  if (tempMidC <= -5) decay = 0.6;       // cold: powder stays
+  else if (tempMidC <= 0) decay = 0.3;    // mild: partial retention
+  else decay = 0.1;                        // warm: mostly gone
+  return todaySnow + yesterdaySnow * decay;
+}
+
 function scoreSnowDepth(cm) {
   return interpolate(cm, [[0,0],[50,25],[100,45],[200,65],[300,80],[400,90],[500,100]]);
+}
+
+// Fallback snow depth: use last known non-zero value from history
+function resolveSnowBase(db, resortId, date, rawValue) {
+  if (rawValue > 0) return rawValue;
+  // Look for most recent non-zero snow_base_cm for this resort
+  const row = db.prepare(
+    "SELECT snow_base_cm FROM daily_forecasts WHERE resort_id = ? AND snow_base_cm > 0 AND date <= ? ORDER BY date DESC, fetched_at DESC LIMIT 1"
+  ).get(resortId, date);
+  return row ? row.snow_base_cm : 0;
 }
 
 function scoreWeather(condition) {
@@ -158,16 +177,21 @@ function scoreTrails(trailCount, diffBeg, diffInt, diffAdv) {
 const WEIGHTS_TOKYO = { freshSnow:0.25, snowDepth:0.10, weather:0.10, temperature:0.10, wind:0.10, access:0.15, value:0.10, trails:0.10 };
 const WEIGHTS_HOKKAIDO = { freshSnow:0.28, snowDepth:0.18, weather:0.10, temperature:0.10, wind:0.07, access:0.05, value:0.10, trails:0.12 };
 
-function scoreResort(resort, forecast, area) {
+function scoreResort(resort, forecast, area, yesterdayForecast, db, dateStr) {
   const w = area === 'hokkaido' ? WEIGHTS_HOKKAIDO : WEIGHTS_TOKYO;
   const newSnow = forecast ? forecast.new_snow_cm : 0;
-  const snowBase = forecast ? forecast.snow_base_cm : 0;
+  const rawSnowBase = forecast ? forecast.snow_base_cm : 0;
+  const snowBase = db ? resolveSnowBase(db, resort.id, dateStr, rawSnowBase) : rawSnowBase;
   const tempMid = forecast ? forecast.temp_mid_c : 0;
   const windMid = forecast ? forecast.wind_speed_mid : 10;
   const weatherIcon = forecast ? forecast.weather_icon : '';
 
+  // Effective fresh snow considers yesterday's snowfall + temperature retention
+  const yesterdaySnow = yesterdayForecast ? yesterdayForecast.new_snow_cm : 0;
+  const effectiveSnow = calcEffectiveSnow(newSnow, yesterdaySnow, tempMid);
+
   const scores = {
-    freshSnow: scoreFreshSnow(newSnow),
+    freshSnow: scoreFreshSnow(effectiveSnow),
     snowDepth: scoreSnowDepth(snowBase),
     weather: scoreWeatherFromIcon(weatherIcon),
     temperature: scoreTemperature(tempMid),
@@ -186,7 +210,7 @@ function scoreResort(resort, forecast, area) {
 
   return {
     ...resort,
-    newSnow, snowBase, tempMid, windMid,
+    newSnow, effectiveSnow: Math.round(effectiveSnow * 10) / 10, snowBase, tempMid, windMid,
     weatherIcon,
     weatherEmoji: getWeatherEmoji(weatherIcon),
     score: Math.round(total * 10) / 10,
@@ -495,7 +519,12 @@ async function main() {
   // Read DB
   const db = new Database(DB_PATH, { readonly: true });
   const rows = db.prepare('SELECT * FROM daily_forecasts WHERE date = ? ORDER BY fetched_at DESC').all(dateStr);
-  db.close();
+
+  // Yesterday's date for effective snow calculation
+  const yesterdayDate = new Date(Date.UTC(+y, +m - 1, +d));
+  yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+  const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+  const yesterdayRows = db.prepare('SELECT * FROM daily_forecasts WHERE date = ? ORDER BY fetched_at DESC').all(yesterdayStr);
 
   // Dedup: keep latest per resort_id
   const forecastMap = new Map();
@@ -504,12 +533,21 @@ async function main() {
       forecastMap.set(row.resort_id, row);
     }
   }
+
+  const yesterdayMap = new Map();
+  for (const row of yesterdayRows) {
+    if (!yesterdayMap.has(row.resort_id)) {
+      yesterdayMap.set(row.resort_id, row);
+    }
+  }
+
   console.log(`Found forecasts for ${forecastMap.size} resorts on ${dateStr}`);
+  console.log(`Found yesterday forecasts for ${yesterdayMap.size} resorts on ${yesterdayStr}`);
 
   // Score & rank per area
   function processArea(area) {
     const areaResorts = RESORTS.filter(r => r.area === area);
-    const scored = areaResorts.map(r => scoreResort(r, forecastMap.get(r.id) || null, area));
+    const scored = areaResorts.map(r => scoreResort(r, forecastMap.get(r.id) || null, area, yesterdayMap.get(r.id) || null, db, dateStr));
     scored.sort((a, b) => b.score - a.score);
     scored.forEach((r, i) => { r.rank = i + 1; });
     return scored;
@@ -517,6 +555,7 @@ async function main() {
 
   const tokyoAll = processArea('tokyo');
   const hokkaidoAll = processArea('hokkaido');
+  db.close();
 
   // Generate reasons for top 3
   const tokyoTop3 = generateReasons(tokyoAll.slice(0, 3));
