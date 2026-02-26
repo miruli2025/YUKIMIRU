@@ -7,3 +7,5 @@ node_modules/
 .next/
 data/*.db
 public/cards/*.png
+memory/
+tmp/
