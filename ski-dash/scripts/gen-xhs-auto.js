@@ -102,7 +102,8 @@ function resolveSnowBase(db, resortId, date, rawValue) {
   const row = db.prepare(
     "SELECT snow_base_cm FROM daily_forecasts WHERE resort_id = ? AND snow_base_cm > 0 AND date <= ? ORDER BY date DESC, fetched_at DESC LIMIT 1"
   ).get(resortId, date);
-  return row ? row.snow_base_cm : 0;
+  if (row) return row.snow_base_cm;
+  return MANUAL_SNOW_BASE_FALLBACK[resortId] ?? 0;
 }
 
 function scoreWeather(condition) {
@@ -177,6 +178,16 @@ function scoreTrails(trailCount, diffBeg, diffInt, diffAdv) {
 const WEIGHTS_TOKYO = { freshSnow:0.25, snowDepth:0.10, weather:0.10, temperature:0.10, wind:0.10, access:0.15, value:0.10, trails:0.10 };
 const WEIGHTS_HOKKAIDO = { freshSnow:0.28, snowDepth:0.18, weather:0.10, temperature:0.10, wind:0.07, access:0.05, value:0.10, trails:0.12 };
 
+// Manual fallback snow base for Tokyo-area resorts when upstream source does not provide updated depth.
+const MANUAL_SNOW_BASE_FALLBACK = {
+  'naeba': 160,
+  'kagura': 275,
+  'gala-yuzawa': 200,
+  'ishiuchi-maruyama': 150,
+  'maiko': 195,
+  'kandatsu-kogen': 150,
+};
+
 function scoreResort(resort, forecast, area, yesterdayForecast, db, dateStr) {
   const w = area === 'hokkaido' ? WEIGHTS_HOKKAIDO : WEIGHTS_TOKYO;
   const newSnow = forecast ? forecast.new_snow_cm : 0;
@@ -211,6 +222,7 @@ function scoreResort(resort, forecast, area, yesterdayForecast, db, dateStr) {
   return {
     ...resort,
     newSnow, effectiveSnow: Math.round(effectiveSnow * 10) / 10, snowBase, tempMid, windMid,
+    hasSnowBaseData: snowBase > 0,
     weatherIcon,
     weatherEmoji: getWeatherEmoji(weatherIcon),
     score: Math.round(total * 10) / 10,
@@ -293,7 +305,7 @@ function buildPage1HTML(title, subtitle, resorts, driveLabel) {
       <div class="stats">
         <div class="stat-row">
           <span>🌨️ <strong>${r.newSnow}cm</strong> 新雪</span>
-          <span>⛰️ <strong>${r.snowBase}cm</strong> 积雪</span>
+          <span>⛰️ <strong>${r.hasSnowBaseData ? `${r.snowBase}cm` : '无数据'}</strong> 积雪</span>
         </div>
         <div class="stat-row">
           <span>🌡️ ${r.tempMid}°C ${r.weatherEmoji} ${r.weatherIcon}</span>
@@ -401,7 +413,7 @@ function buildListHTML(title, subtitle, pageLabel, resorts, driveLabel) {
         <div class="stats-line">
           <span class="st">${r.weatherEmoji}</span>
           <span class="st"><strong>${r.newSnow}cm</strong>新雪</span>
-          <span class="st">${r.snowBase}cm积雪</span>
+          <span class="st">${r.hasSnowBaseData ? `${r.snowBase}cm积雪` : '积雪无数据'}</span>
           <span class="st">${r.tempMid}°C</span>
           <span class="st">💨${r.windMid}</span>
           <span class="st">🚗${dh}h</span>
